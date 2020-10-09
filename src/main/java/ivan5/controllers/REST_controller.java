@@ -2,44 +2,50 @@ package ivan5.controllers;
 
 import ivan5.models.Bulletin;
 import ivan5.models.User;
+import ivan5.repo.BulletinRepository;
+import ivan5.repo.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 @RestController
 @RequestMapping("/")
 public class REST_controller {
 
-    // "/"
-    // метод возвращаюший список обьявлений
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private BulletinRepository bulletinRepository;
+
+
     @PostMapping
-    public ArrayList<Bulletin> showBulletin() {
-        ArrayList<Bulletin> list = new ArrayList<Bulletin>();
-
-        list.add(new Bulletin("title 1", "some text", "name", "14:06"));
-        list.add(new Bulletin("title 2", "some text", "name", "14:06"));
-        list.add(new Bulletin("title 3", "some text", "name", "14:06"));
-        list.add(new Bulletin("title 4", "some text", "name", "14:06"));
-        list.add(new Bulletin("title 5", "some text", "name", "14:06"));
-
+    public Iterable<Bulletin> showBulletin(@RequestParam int page) {
         System.out.println("path: /");
+
+        Pageable pageable = PageRequest.of(page - 1, 10, Sort.by("time").descending());
+        Page<Bulletin> bulletins = bulletinRepository.findAll(pageable);
+        List<Bulletin> list = bulletins.getContent();
 
         return list;
     }
-
+    
     // post("/add_new_bulletin")
     // добавляет новое объявление в базу данных
     @PostMapping("/add_new_bulletin")
     private boolean addNewBulletin(@RequestParam String firstName, @RequestParam String lastName, @RequestParam String title, @RequestParam String body) {
         System.out.println("/add_new_bulletin");
-        System.out.println(title);
-        System.out.println(body);
-        System.out.println(firstName);
-        System.out.println(lastName);
-        System.out.println(new Date().toString());
-
-        // нужно записать в базу данных
+        DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm");
+        bulletinRepository.save(new Bulletin(title, body, firstName + " " + lastName, dateFormat.format(new Date())));
 
         return true;
     }
@@ -47,9 +53,32 @@ public class REST_controller {
     // post("/edit_user_profile")
     // обновить информацию о пользователе, помимо формы нужно прислать email
     @PostMapping("/edit_user_profile")
-    private boolean editUserProfile(@RequestParam String firstName, @RequestParam String lastName, @RequestParam String email) {
-
+    private boolean editUserProfile(@RequestParam String firstName, @RequestParam String lastName, @RequestParam Long id, @RequestParam String email) {
         System.out.println("/edit_user_profile");
+
+        System.out.println(id);
+
+        User user = userRepository.findById(id).get();
+        boolean isChange = false;
+
+        if (!user.getFirstName().equals(firstName)) {
+            user.setFirstName(firstName);
+            isChange = true;
+        }
+
+        if (!user.getLastName().equals(lastName)) {
+            user.setLastName(lastName);
+            isChange = true;
+        }
+
+        if (!user.getEmail().equals(email)) {
+            user.setEmail(email);
+            isChange = true;
+        }
+
+        if (isChange) {
+            userRepository.save(user);
+        }
 
         return true;
     }
@@ -57,33 +86,54 @@ public class REST_controller {
     // авторизация
     @PostMapping("/login")
     private User logIn(@RequestParam String email, @RequestParam String pass) {
-        // проверить существование пользователя с такой почтой
-        // если такого не существует то создать и записать в бд
+        ArrayList<User>  users = (ArrayList<User>) userRepository.findAll();
 
+        if (users.size() == 0) {
+            return null;
+        }
 
-        User user = new User("Иван", "Пятигорец", email);
+        for (User user : users) {
+            if (user.getEmail().equals(email)) {
+                if (user.getPassword().equals(pass)) {
+                    user.setPassword("хуй_в_сраку");
+                    System.out.println(user);
+                    System.out.print("/login");
+                    return user;
+                }
+            }
+        }
 
-        System.out.println(user);
-        System.out.print("/login");
-
-        // но это временный отвер должен пройти анализ данный и только тогда определимся с ответом
-        return user;
+        return null;
     }
 
     // регистрация
     @PostMapping("/signup")
-    private boolean signUp(@RequestParam String firstName, @RequestParam String lastName, @RequestParam String email, @RequestParam String pass) {
-        // проверить существование пользователя с такой почтой
-        // если такого не существует то создать и записать в бд
+    private Long signUp(@RequestParam String firstName, @RequestParam String lastName, @RequestParam String email, @RequestParam String pass) {
+        ArrayList<User>  users = (ArrayList<User>) userRepository.findAll();
 
-        User user = new User(firstName, lastName, email);
+        if (users.size() == 0) {
+            User user = new User(firstName, lastName, email, pass);
+            userRepository.save(user);
+            System.out.println(user.getId());
+            return user.getId();
+        }
 
-        System.out.println(user);
-        System.out.print("/signup");
+        for (User user : users) {
+            if (user.getEmail().equals(email)) {
+                return null;
+            }
+        }
 
-        // но это временный отвер должен пройти анализ данный и только тогда определимся с ответом
-        return true;
+        System.out.println("/signup");
+        User user = new User(firstName, lastName, email, pass);
+        userRepository.save(user);
+        System.out.println(user.getId());
+        return user.getId();
     }
 
+    @PostMapping("get_count")
+    public Long getCount() {
+        return bulletinRepository.count();
+    }
 
 }
